@@ -348,7 +348,7 @@
     entries.forEach(([dirName, game], index) => {
       const cfg = getStatusConfig(game.status);
       const cssClass = statusCssClass(game.status);
-      const prevCfg = game.previousStatus ? getStatusConfig(game.previousStatus) : null;
+      const prevCfg = (game.previousStatus && game.previousStatus !== game.status) ? getStatusConfig(game.previousStatus) : null;
       const consoleLink = game.appId ? `${CONSOLE_URL}${game.appId}` : '#';
       const cardId = game.appId || dirName;
       const isExpanded = expandedCardId === cardId;
