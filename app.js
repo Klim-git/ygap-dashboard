@@ -357,7 +357,7 @@
     statsBar.classList.remove('visible');
 
     const params = new URLSearchParams(window.location.search);
-    const gistId = params.get('gist') || 'dfa086096a93afb8728a43068d39909f';
+    const gistId = params.get('gist') || '89ea20278297942db9f7ccf901a8d9d1';
 
     if (!gistId) {
       // Show demo data
