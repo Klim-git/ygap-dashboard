@@ -16,7 +16,7 @@
     UNKNOWN:   { emoji: '❓', color: '#6c757d', label: 'Unknown' },
   };
 
-  const CONSOLE_URL = 'https://games.yandex.ru/console/games/';
+  const CONSOLE_URL = 'https://games.yandex.ru/console/application/';
   const GIST_API = 'https://api.github.com/gists/';
   const GIST_FILENAME = 'ygap_dashboard_data.json';
 
@@ -354,7 +354,7 @@
     statsBar.classList.remove('visible');
 
     const params = new URLSearchParams(window.location.search);
-    const gistId = params.get('gist');
+    const gistId = params.get('gist') || 'dfa086096a93afb8728a43068d39909f';
 
     if (!gistId) {
       // Show demo data
