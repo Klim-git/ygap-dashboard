@@ -211,6 +211,23 @@ body::before {
   to   { transform: translate(-10px, 20px); }
 }
 
+/* === Auto-Refresh Dot (pulsing dot near header) === */
+.auto-refresh-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-approved);
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.6);
+  animation: autoRefreshPulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+@keyframes autoRefreshPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50%      { opacity: 1; transform: scale(1.2); }
+}
+
 /* === Games Container === */
 .games {
   flex: 1;
@@ -232,8 +249,10 @@ body::before {
   box-shadow: var(--shadow-card);
   transition: transform 0.3s var(--transition-smooth),
               box-shadow 0.3s var(--transition-smooth),
-              border-color 0.3s var(--transition-smooth);
+              border-color 0.3s var(--transition-smooth),
+              opacity 0.3s var(--transition-smooth);
   overflow: hidden;
+  cursor: pointer;
   /* Entrance animation — set by JS */
   opacity: 0;
   transform: translateY(24px);
@@ -276,6 +295,11 @@ body::before {
 
 .game-card:active {
   transform: scale(0.98);
+}
+
+/* Hidden card (filtered out) */
+.game-card--hidden {
+  display: none !important;
 }
 
 @keyframes cardEnter {
@@ -361,7 +385,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 .game-card__meta-row {
@@ -399,6 +423,245 @@ body::before {
 
 .game-card__prev-status .arrow {
   font-size: 0.65rem;
+}
+
+/* === Expand Indicator (chevron) === */
+.game-card__expand-indicator {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 6px;
+}
+
+.game-card__chevron {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  position: relative;
+  opacity: 0.35;
+  transition: opacity 0.25s ease, transform 0.3s var(--transition-smooth);
+}
+
+.game-card__chevron::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--tg-hint);
+  border-bottom: 2px solid var(--tg-hint);
+  transform: translate(-50%, -65%) rotate(45deg);
+  transition: transform 0.3s var(--transition-smooth);
+}
+
+.game-card:hover .game-card__chevron {
+  opacity: 0.6;
+}
+
+.game-card--expanded .game-card__chevron {
+  opacity: 0.7;
+}
+
+.game-card--expanded .game-card__chevron::before {
+  transform: translate(-50%, -35%) rotate(-135deg);
+}
+
+/* === Expandable Section === */
+.game-card__expandable {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s var(--transition-smooth);
+}
+
+.game-card--expanded .game-card__expandable {
+  max-height: 400px;
+}
+
+.game-card__expandable-inner {
+  padding-top: var(--space-sm);
+  padding-bottom: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.3s 0.1s ease, transform 0.3s 0.1s ease;
+}
+
+.game-card--expanded .game-card__expandable-inner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* === Rejection Reason Box === */
+.rejection-box {
+  display: flex;
+  gap: var(--space-sm);
+  padding: 12px var(--space-md);
+  border-radius: 12px;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1px solid rgba(220, 53, 69, 0.25);
+}
+
+.rejection-box__icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.rejection-box__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rejection-box__title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #f87171;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rejection-box__text {
+  font-size: 0.82rem;
+  color: #fca5a5;
+  line-height: 1.5;
+}
+
+/* === Quick Links === */
+.quick-links {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.quick-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--tg-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-decoration: none;
+  transition: all 0.2s var(--transition-smooth);
+  white-space: nowrap;
+}
+
+.quick-link:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.quick-link:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.quick-link__icon {
+  font-size: 0.9rem;
+}
+
+.quick-link__text {
+  color: var(--tg-hint);
+}
+
+/* === Pipeline Progress Bar === */
+.pipeline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  padding: 4px 0;
+  width: 100%;
+}
+
+.pipeline__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.pipeline__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.pipeline__dot--completed {
+  font-size: 11px;
+}
+
+.pipeline__dot--current {
+  font-size: 14px;
+  animation: pipelinePulse 2s ease-in-out infinite;
+}
+
+.pipeline__dot--rejected {
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc3545 !important;
+  animation: pipelineRejectPulse 1.5s ease-in-out infinite;
+}
+
+.pipeline__dot--future {
+  color: rgba(136, 136, 160, 0.5);
+  font-size: 10px;
+}
+
+@keyframes pipelinePulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50%      { transform: scale(1.3); opacity: 1; }
+}
+
+@keyframes pipelineRejectPulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(1.15); opacity: 1; }
+}
+
+.pipeline__label {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--tg-hint);
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0.7;
+  max-width: 54px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pipeline__line {
+  flex: 1;
+  height: 2px;
+  min-width: 16px;
+  max-width: 40px;
+  align-self: center;
+  margin-top: -10px;
+  background: rgba(136, 136, 160, 0.2);
+  border-radius: 1px;
+  position: relative;
+}
+
+.pipeline__line--completed {
+  background: rgba(40, 167, 69, 0.5);
+}
+
+.pipeline__line--rejected {
+  background: rgba(220, 53, 69, 0.5);
 }
 
 /* Console link */
@@ -648,6 +911,7 @@ body::before {
   margin-bottom: var(--space-sm);
 }
 
+/* Stats chip — now clickable */
 .stats-chip {
   display: inline-flex;
   align-items: center;
@@ -659,6 +923,38 @@ body::before {
   background: rgba(255, 255, 255, 0.06);
   color: var(--tg-hint);
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.25s var(--transition-smooth);
+  border: 1.5px solid transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stats-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stats-chip:active {
+  transform: scale(0.95);
+}
+
+/* Active filter chip — highlight ring/glow */
+.stats-chip--active {
+  border-color: var(--tg-link);
+  background: rgba(124, 138, 255, 0.15);
+  color: var(--tg-text);
+  box-shadow: 0 0 12px rgba(124, 138, 255, 0.3), inset 0 0 6px rgba(124, 138, 255, 0.1);
+}
+
+/* "All" chip style */
+.stats-chip--all {
+  background: rgba(124, 92, 252, 0.12);
+  border-color: rgba(124, 92, 252, 0.3);
+  color: var(--tg-text);
+}
+
+.stats-chip--all:hover {
+  background: rgba(124, 92, 252, 0.2);
 }
 
 .stats-chip__dot {
@@ -744,6 +1040,11 @@ body::before {
 
   .game-card {
     padding: var(--space-lg);
+  }
+
+  .pipeline__line {
+    min-width: 24px;
+    max-width: 56px;
   }
 }
 
