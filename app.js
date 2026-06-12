@@ -28,6 +28,7 @@
   const GIST_API = 'https://api.github.com/gists/';
   const GIST_FILENAME = 'ygap_dashboard_data.json';
   const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
+  const BOT_USERNAME = 'YGAPMonitorBot';
 
   const DEMO_DATA = {
     games: {
@@ -48,6 +49,7 @@
         lastCheck: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
         previousStatus: 'DRAFT',
         rejectionReason: null,
+        statusChangedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000).toISOString(),
       },
       'neon-blocks': {
         appId: '540398',
@@ -77,6 +79,32 @@
         rejectionReason: null,
       },
     },
+    events: [
+      {
+        timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+        appId: '540397',
+        title: 'Space Runner',
+        from: 'DRAFT',
+        to: 'IN_REVIEW',
+        iconUrl: null,
+      },
+      {
+        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        appId: '540398',
+        title: 'Neon Blocks',
+        from: 'APPROVED',
+        to: 'PUBLISHED',
+        iconUrl: null,
+      },
+      {
+        timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+        appId: '540399',
+        title: 'Pixel Quest',
+        from: 'IN_REVIEW',
+        to: 'REJECTED',
+        iconUrl: null,
+      },
+    ],
     lastFullCheck: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   };
 
@@ -85,12 +113,15 @@
   let activeFilter = null;
   let expandedCardId = null;
   let autoRefreshTimer = null;
+  let waitTimerInterval = null;
   let isLoading = false;
   let isAutoRefreshing = false;
+  let activeTab = 'games';
 
   // ─── DOM references ──────────────────────────────────────
   const gamesContainer = document.getElementById('games-container');
   const statsBar = document.getElementById('stats-bar');
+  const appEl = document.getElementById('app');
 
   // ─── Telegram WebApp init ─────────────────────────────────
   const tg = window.Telegram?.WebApp;
@@ -138,6 +169,42 @@
     return `${days} дн назад`;
   }
 
+  function relativeTimeDetailed(isoString) {
+    if (!isoString) return '—';
+    const diff = Date.now() - new Date(isoString).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'только что';
+    if (mins < 60) return `${mins} мин назад`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} ч назад`;
+    // For events — show "Вчера 14:30" or date
+    const d = new Date(isoString);
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const timeStr = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === yesterday.toDateString()) {
+      return `Вчера ${timeStr}`;
+    }
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + ' ' + timeStr;
+  }
+
+  function formatWaitDuration(isoString) {
+    if (!isoString) return null;
+    const diff = Date.now() - new Date(isoString).getTime();
+    if (diff < 0) return null;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins} мин`;
+    const hours = Math.floor(mins / 60);
+    const remainMins = mins % 60;
+    if (hours < 24) {
+      return remainMins > 0 ? `${hours} ч ${remainMins} мин` : `${hours} ч`;
+    }
+    const days = Math.floor(hours / 24);
+    const remainHours = hours % 24;
+    return remainHours > 0 ? `${days} дн ${remainHours} ч` : `${days} дн`;
+  }
+
   function formatTime(isoString) {
     if (!isoString) return '—';
     const d = new Date(isoString);
@@ -158,6 +225,118 @@
     try {
       Telegram.WebApp?.HapticFeedback?.impactOccurred?.('light');
     } catch (_) { /* ignore */ }
+  }
+
+  function hapticSelection() {
+    try {
+      Telegram.WebApp?.HapticFeedback?.selectionChanged?.();
+    } catch (_) { /* ignore */ }
+  }
+
+  function getDateGroupLabel(date) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays = Math.floor((today - d) / (24 * 60 * 60 * 1000));
+    if (diffDays === 0) return 'Сегодня';
+    if (diffDays === 1) return 'Вчера';
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  }
+
+  // ─── Page Navigation / Tab Bar ─────────────────────────────
+  function createPageContainers() {
+    // Wrap existing games container and stats bar into a page
+    const pageGames = document.createElement('div');
+    pageGames.id = 'page-games';
+    pageGames.className = 'page page--active';
+
+    // Move gamesContainer into page-games
+    gamesContainer.parentNode.insertBefore(pageGames, gamesContainer);
+    pageGames.appendChild(gamesContainer);
+
+    // Create events page
+    const pageEvents = document.createElement('div');
+    pageEvents.id = 'page-events';
+    pageEvents.className = 'page';
+    pageEvents.innerHTML = '<div class="events-page" id="events-content"></div>';
+    appEl.appendChild(pageEvents);
+
+    // Create settings page
+    const pageSettings = document.createElement('div');
+    pageSettings.id = 'page-settings';
+    pageSettings.className = 'page';
+    pageSettings.innerHTML = '<div class="settings-page" id="settings-content"></div>';
+    appEl.appendChild(pageSettings);
+  }
+
+  function createTabBar() {
+    const tabBar = document.createElement('nav');
+    tabBar.className = 'tab-bar';
+    tabBar.id = 'tab-bar';
+    tabBar.innerHTML = `
+      <div class="tab-bar__item tab-bar__item--active" data-tab="games">
+        <span class="tab-bar__icon">🎮</span>
+        <span class="tab-bar__label">Игры</span>
+      </div>
+      <div class="tab-bar__item" data-tab="events">
+        <span class="tab-bar__icon">📜</span>
+        <span class="tab-bar__label">События</span>
+      </div>
+      <div class="tab-bar__item" data-tab="settings">
+        <span class="tab-bar__icon">⚙️</span>
+        <span class="tab-bar__label">Настройки</span>
+      </div>
+    `;
+    document.body.appendChild(tabBar);
+
+    tabBar.addEventListener('click', (e) => {
+      const item = e.target.closest('.tab-bar__item');
+      if (!item) return;
+      const tab = item.dataset.tab;
+      if (tab && tab !== activeTab) {
+        switchTab(tab);
+      }
+    });
+  }
+
+  function switchTab(tab) {
+    hapticSelection();
+    activeTab = tab;
+
+    // Update tab bar active state
+    const tabItems = document.querySelectorAll('.tab-bar__item');
+    tabItems.forEach((item) => {
+      if (item.dataset.tab === tab) {
+        item.classList.add('tab-bar__item--active');
+      } else {
+        item.classList.remove('tab-bar__item--active');
+      }
+    });
+
+    // Update pages
+    const pages = document.querySelectorAll('.page');
+    pages.forEach((page) => {
+      page.classList.remove('page--active');
+    });
+    const activePage = document.getElementById(`page-${tab}`);
+    if (activePage) {
+      activePage.classList.add('page--active');
+    }
+
+    // Stats bar visibility — only on games page
+    if (tab === 'games') {
+      if (currentData) statsBar.classList.add('visible');
+    } else {
+      statsBar.classList.remove('visible');
+    }
+
+    // Render page content on demand
+    if (tab === 'events' && currentData) {
+      renderEvents(currentData);
+    }
+    if (tab === 'settings' && currentData) {
+      renderSettings(currentData);
+    }
   }
 
   // ─── Pipeline Progress Bar ─────────────────────────────────
@@ -257,6 +436,44 @@
         </div>
       </div>
     `;
+  }
+
+  // ─── Wait Timer for IN_REVIEW ─────────────────────────────
+  function renderWaitTimer(game) {
+    if (game.status !== 'IN_REVIEW' || !game.statusChangedAt) return '';
+    const duration = formatWaitDuration(game.statusChangedAt);
+    if (!duration) return '';
+    return `
+      <div class="game-card__wait-timer" data-status-changed="${escapeHtml(game.statusChangedAt)}">
+        <span class="game-card__wait-timer-icon">⏱</span>
+        <span class="game-card__meta-value">На модерации: ${duration}</span>
+      </div>
+    `;
+  }
+
+  function updateWaitTimers() {
+    const timers = document.querySelectorAll('.game-card__wait-timer');
+    timers.forEach((timer) => {
+      const changedAt = timer.dataset.statusChanged;
+      if (!changedAt) return;
+      const duration = formatWaitDuration(changedAt);
+      if (duration) {
+        const valueEl = timer.querySelector('.game-card__meta-value');
+        if (valueEl) valueEl.textContent = `На модерации: ${duration}`;
+      }
+    });
+  }
+
+  function startWaitTimerUpdates() {
+    stopWaitTimerUpdates();
+    waitTimerInterval = setInterval(updateWaitTimers, 60000);
+  }
+
+  function stopWaitTimerUpdates() {
+    if (waitTimerInterval) {
+      clearInterval(waitTimerInterval);
+      waitTimerInterval = null;
+    }
   }
 
   // ─── Skeleton loading ────────────────────────────────────
@@ -387,6 +604,7 @@
               <span class="game-card__meta-icon">🕐</span>
               <span class="game-card__meta-value">Проверен: ${relativeTime(game.lastCheck)}</span>
             </div>
+            ${renderWaitTimer(game)}
             ${prevCfg ? `
             <div class="game-card__prev-status">
               ${prevCfg.emoji} было: ${escapeHtml(game.previousStatus)}
@@ -435,6 +653,247 @@
 
     // Render stats
     renderStats(data);
+
+    // Start wait timer updates
+    startWaitTimerUpdates();
+  }
+
+  // ─── Events Page ──────────────────────────────────────────
+  function renderEvents(data) {
+    const container = document.getElementById('events-content');
+    if (!container) return;
+
+    const events = data?.events;
+    if (!events || events.length === 0) {
+      container.innerHTML = `
+        <div class="events-empty">
+          <div class="events-empty__icon">🕐</div>
+          <div class="events-empty__text">Пока нет событий</div>
+        </div>
+      `;
+      return;
+    }
+
+    // Sort by timestamp descending, limit to 50
+    const sorted = [...events]
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, 50);
+
+    // Group by date
+    const groups = {};
+    sorted.forEach((evt) => {
+      const d = new Date(evt.timestamp);
+      const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if (!groups[dateKey]) {
+        groups[dateKey] = { date: d, events: [] };
+      }
+      groups[dateKey].events.push(evt);
+    });
+
+    let html = '';
+    Object.values(groups).forEach((group) => {
+      const label = getDateGroupLabel(group.date);
+      html += `<div class="events-date-group">`;
+      html += `<div class="events-date-label">${escapeHtml(label)}</div>`;
+      html += `<div class="event-timeline">`;
+
+      group.events.forEach((evt) => {
+        const toCfg = getStatusConfig(evt.to);
+        const fromCfg = getStatusConfig(evt.from);
+        const timeStr = relativeTimeDetailed(evt.timestamp);
+        const iconHtml = evt.iconUrl
+          ? `<img class="event-card__game-icon" src="${escapeHtml(evt.iconUrl)}" alt="" onerror="this.style.display='none'">`
+          : '';
+
+        html += `
+          <div class="event-item">
+            <div class="event-dot" style="background: ${toCfg.color}"></div>
+            <div class="event-card">
+              <div class="event-card__header">
+                ${iconHtml}
+                <span class="event-card__game-title">${escapeHtml(evt.title || evt.appId)}</span>
+                <span class="event-card__time">${escapeHtml(timeStr)}</span>
+              </div>
+              <div class="event-card__status-change">
+                <span class="event-badge" style="background: ${fromCfg.color}">${fromCfg.emoji} ${escapeHtml(evt.from)}</span>
+                <span class="event-arrow">→</span>
+                <span class="event-badge" style="background: ${toCfg.color}">${toCfg.emoji} ${escapeHtml(evt.to)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div></div>`;
+    });
+
+    container.innerHTML = html;
+  }
+
+  // ─── Settings Page ────────────────────────────────────────
+  function renderSettings(data) {
+    const container = document.getElementById('settings-content');
+    if (!container) return;
+
+    const games = data?.games || {};
+    const entries = Object.entries(games);
+    const totalGames = entries.length;
+
+    // Section 1: My Games
+    let gamesListHtml = '';
+    entries.forEach(([dirName, game]) => {
+      const cfg = getStatusConfig(game.status);
+      const iconHtml = game.iconUrl
+        ? `<img class="settings-game-row__icon" src="${escapeHtml(game.iconUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        : '';
+      const emojiStyle = game.iconUrl ? 'style="display:none"' : '';
+
+      gamesListHtml += `
+        <div class="settings-game-row">
+          ${iconHtml}
+          <span class="settings-game-row__icon-emoji" ${emojiStyle}>${cfg.emoji}</span>
+          <div class="settings-game-row__info">
+            <div class="settings-game-row__title">${escapeHtml(game.title || dirName)}</div>
+            <div class="settings-game-row__appid">ID: ${escapeHtml(game.appId || '—')}</div>
+          </div>
+          <button class="settings-game-row__delete" data-appid="${escapeHtml(game.appId || '')}" title="Удалить">🗑️</button>
+        </div>
+      `;
+    });
+
+    if (entries.length === 0) {
+      gamesListHtml = `
+        <div style="text-align:center; color: var(--tg-hint); padding: 16px; font-size: 0.85rem;">
+          Нет отслеживаемых игр
+        </div>
+      `;
+    }
+
+    // Format last check time
+    const lastCheckStr = data.lastFullCheck
+      ? new Date(data.lastFullCheck).toLocaleString('ru-RU', {
+          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+        })
+      : '—';
+
+    container.innerHTML = `
+      <!-- My Games Section -->
+      <div class="settings-section">
+        <div class="settings-section__title">
+          <span class="settings-section__title-icon">🎮</span>
+          Мои игры
+        </div>
+        <div class="settings-game-list">
+          ${gamesListHtml}
+        </div>
+      </div>
+
+      <!-- Add Game Section -->
+      <div class="settings-section">
+        <div class="settings-section__title">
+          <span class="settings-section__title-icon">➕</span>
+          Добавить игру
+        </div>
+        <div class="settings-add-form">
+          <input
+            type="text"
+            id="settings-add-input"
+            class="settings-add-form__input"
+            placeholder="App ID"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            autocomplete="off"
+          >
+          <button class="settings-add-form__button" id="settings-add-btn">Добавить</button>
+        </div>
+        <div class="settings-add-form__hint">Введите ID игры из консоли Яндекс Игр</div>
+      </div>
+
+      <!-- Info Section -->
+      <div class="settings-section">
+        <div class="settings-section__title">
+          <span class="settings-section__title-icon">ℹ️</span>
+          Информация
+        </div>
+        <div class="settings-info-list">
+          <div class="settings-info-row">
+            <span class="settings-info-row__label">Версия бота</span>
+            <span class="settings-info-row__value">v1.0.0</span>
+          </div>
+          <div class="settings-info-row">
+            <span class="settings-info-row__label">Игр отслеживается</span>
+            <span class="settings-info-row__value">${totalGames}</span>
+          </div>
+          <div class="settings-info-row">
+            <span class="settings-info-row__label">Последняя проверка</span>
+            <span class="settings-info-row__value">${escapeHtml(lastCheckStr)}</span>
+          </div>
+          <div class="settings-info-row">
+            <span class="settings-info-row__label">GitHub</span>
+            <span class="settings-info-row__value"><a href="https://github.com" target="_blank" rel="noopener noreferrer">Репозиторий ↗</a></span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Attach event listeners
+    initSettingsHandlers();
+  }
+
+  function initSettingsHandlers() {
+    // Delete buttons
+    const deleteButtons = document.querySelectorAll('.settings-game-row__delete');
+    deleteButtons.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const appId = btn.dataset.appid;
+        if (!appId) return;
+
+        hapticLight();
+        const gameName = btn.closest('.settings-game-row')?.querySelector('.settings-game-row__title')?.textContent || appId;
+        const confirmed = confirm(`Удалить «${gameName}» (ID: ${appId}) из отслеживания?`);
+        if (!confirmed) return;
+
+        openBotCommand(`/remove ${appId}`);
+      });
+    });
+
+    // Add game button
+    const addBtn = document.getElementById('settings-add-btn');
+    const addInput = document.getElementById('settings-add-input');
+    if (addBtn && addInput) {
+      addBtn.addEventListener('click', () => {
+        const appId = addInput.value.trim();
+        if (!appId || !/^\d+$/.test(appId)) {
+          addInput.focus();
+          return;
+        }
+        hapticLight();
+        openBotCommand(`/add ${appId}`);
+        addInput.value = '';
+      });
+
+      addInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          addBtn.click();
+        }
+      });
+    }
+  }
+
+  function openBotCommand(command) {
+    // Format: /add 123456 → text=/add+123456
+    const encoded = encodeURIComponent(command);
+    const url = `https://t.me/${BOT_USERNAME}?text=${encoded}`;
+    try {
+      if (tg && tg.openTelegramLink) {
+        tg.openTelegramLink(url);
+      } else {
+        window.open(url, '_blank');
+      }
+    } catch (_) {
+      window.open(url, '_blank');
+    }
   }
 
   // ─── Status filter ────────────────────────────────────────
@@ -535,10 +994,12 @@
       </div>
     `;
 
-    // Animate in
-    requestAnimationFrame(() => {
-      statsBar.classList.add('visible');
-    });
+    // Only show on games tab
+    if (activeTab === 'games') {
+      requestAnimationFrame(() => {
+        statsBar.classList.add('visible');
+      });
+    }
   }
 
   // ─── Stats chip click handler (event delegation) ──────────
@@ -636,9 +1097,14 @@
       }
 
       const data = JSON.parse(gist.files[GIST_FILENAME].content);
+      currentData = data;
       hideRefreshIndicator();
       hideAutoRefreshDot();
       renderGames(data);
+
+      // If currently on events/settings, re-render those too
+      if (activeTab === 'events') renderEvents(data);
+      if (activeTab === 'settings') renderSettings(data);
     } catch (err) {
       console.error('[YGAP] Fetch error:', err);
       hideRefreshIndicator();
@@ -717,8 +1183,10 @@
   function handleVisibilityChange() {
     if (document.hidden) {
       stopAutoRefresh();
+      stopWaitTimerUpdates();
     } else {
       startAutoRefresh();
+      startWaitTimerUpdates();
       // Immediate silent refresh when coming back
       fetchAndRender(true);
     }
@@ -730,6 +1198,8 @@
   // ─── Init ─────────────────────────────────────────────────
   function init() {
     initTelegram();
+    createPageContainers();
+    createTabBar();
     initCardHoverEffect();
     initCardClickHandler();
     initStatsClickHandler();
