@@ -206,7 +206,10 @@
           <div class="game-card__top">
             <div class="game-card__info">
               <div class="game-card__title">
-                <span class="game-card__title-emoji">${cfg.emoji}</span>
+                ${game.iconUrl 
+                  ? `<img class="game-card__icon" src="${escapeHtml(game.iconUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">`
+                  : ''}
+                <span class="game-card__title-emoji" ${game.iconUrl ? 'style="display:none"' : ''}>${cfg.emoji}</span>
                 <span class="game-card__title-text">${escapeHtml(game.title || dirName)}</span>
               </div>
             </div>
