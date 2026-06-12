@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f0f23">
+  <meta name="description" content="YGAP Dashboard — мониторинг статусов игр Yandex Games">
+  <title>YGAP Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header__glow"></div>
+      <div class="header__content">
+        <div class="header__icon">🎮</div>
+        <div class="header__text">
+          <h1 class="header__title">YGAP Dashboard</h1>
+          <p class="header__subtitle">Мониторинг игр</p>
+        </div>
+      </div>
+      <div class="header__decoration">
+        <div class="header__orb header__orb--1"></div>
+        <div class="header__orb header__orb--2"></div>
+        <div class="header__orb header__orb--3"></div>
+      </div>
+    </header>
+
+    <!-- Games Container -->
+    <main class="games" id="games-container">
+      <!-- Cards rendered by JS -->
+    </main>
+
+    <!-- Stats Bar -->
+    <footer class="stats-bar" id="stats-bar">
+      <!-- Stats rendered by JS -->
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
